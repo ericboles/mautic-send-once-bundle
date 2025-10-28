@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Mautic\CoreBundle\DependencyInjection\MauticCoreExtension;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
+use function Symfony\Component\DependencyInjection\Loader\Configurator\service;
 
 return function (ContainerConfigurator $configurator): void {
     $services = $configurator->services()
@@ -25,6 +26,8 @@ return function (ContainerConfigurator $configurator): void {
         ->tag('console.command');
 
     // Decorate EmailType to add send_once checkbox
+    // Note: If MultipleTransportBundle is installed, this will decorate their decorator
     $services->set(MauticPlugin\MauticSendOnceBundle\Form\Type\OverrideEmailType::class)
-        ->decorate(Mautic\EmailBundle\Form\Type\EmailType::class);
+        ->decorate(Mautic\EmailBundle\Form\Type\EmailType::class)
+        ->arg('$decorated', service('.inner'));
 };

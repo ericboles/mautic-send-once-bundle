@@ -22,7 +22,7 @@ class OverrideEmailType extends EmailType
 {
     public function __construct(
         TranslatorInterface $translator,
-        EntityManager $entityManager,
+        private EntityManager $entityManager,
         StageModel $stageModel,
         CoreParametersHelper $coreParametersHelper,
         ThemeHelperInterface $themeHelper,
@@ -38,6 +38,16 @@ class OverrideEmailType extends EmailType
 
         $email = $options['data'];
         $alreadySent = $email && $email->getId() ? $this->emailSendRecordRepository->hasBeenSent($email) : false;
+        
+        // Get send_once value from database since Email entity doesn't have getter/setter
+        $sendOnceValue = false;
+        if ($email && $email->getId()) {
+            $connection = $this->entityManager->getConnection();
+            $sendOnceValue = (bool) $connection->fetchOne(
+                'SELECT send_once FROM emails WHERE id = ?',
+                [$email->getId()]
+            );
+        }
 
         $builder->add(
             'sendOnce',
@@ -51,7 +61,8 @@ class OverrideEmailType extends EmailType
                     'readonly' => $alreadySent, // Can't change after sent
                 ],
                 'required' => false,
-                'data'     => $email ? (bool) $email->getSendOnce() : false,
+                'mapped'   => false, // Not mapped to Email entity
+                'data'     => $sendOnceValue,
                 'disabled' => $alreadySent,
             ]
         );
