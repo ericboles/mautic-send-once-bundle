@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace MauticPlugin\MauticSendOnceBundle\Command;
 
 use Doctrine\DBAL\Connection;
+use Mautic\EmailBundle\Entity\EmailRepository;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -14,7 +15,7 @@ use Symfony\Component\Console\Output\OutputInterface;
 /**
  * Cron command to finalize completed send-once emails.
  * 
- * Uses direct DBAL queries to avoid memory issues with Doctrine entity relationships.
+ * Uses EmailRepository::getEmailPendingLeads() to match UI behavior exactly.
  * 
  * Should be run every 5-15 minutes via cron.
  */
@@ -24,6 +25,7 @@ class FinalizeCompletedEmailsCommand extends Command
 
     public function __construct(
         private Connection $connection,
+        private EmailRepository $emailRepository,
         private LoggerInterface $logger
     ) {
         parent::__construct();
@@ -91,28 +93,13 @@ class FinalizeCompletedEmailsCommand extends Command
             $emailName = $emailData['name'];
             $sentCount = (int) $emailData['sent_count'];
 
-            // Check if email has sent to all contacts (simple approach - if sent_count > 0, consider it complete)
-            // More sophisticated: check if there are pending contacts in segments
-            $pendingCount = $this->connection->fetchOne('
-                SELECT COUNT(DISTINCT lll.lead_id)
-                FROM lead_lists_leads lll
-                INNER JOIN email_list_xref elx ON elx.leadlist_id = lll.leadlist_id
-                WHERE elx.email_id = ?
-                    AND lll.manually_removed = 0
-                    AND NOT EXISTS (
-                        SELECT 1
-                        FROM email_stats es
-                        WHERE es.email_id = ?
-                            AND es.lead_id = lll.lead_id
-                    )
-                    AND NOT EXISTS (
-                        SELECT 1
-                        FROM lead_donotcontact dnc
-                        WHERE dnc.lead_id = lll.lead_id
-                            AND dnc.channel = "email"
-                    )
-                LIMIT 1
-            ', [$emailId, $emailId]);
+            // Use Mautic's EmailRepository method to get pending count - this matches UI behavior exactly
+            $pendingCount = $this->emailRepository->getEmailPendingLeads(
+                $emailId,
+                null,  // variantIds
+                null,  // listIds (will auto-detect from email)
+                true   // countOnly
+            );
 
             if ($pendingCount > 0) {
                 $output->writeln(sprintf(
