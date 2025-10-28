@@ -29,7 +29,7 @@ class CustomContentSubscriber implements EventSubscriberInterface
         $vars = $event->getVars();
 
         try {
-            // Inject Send Once field into the email form (Advanced tab, after settings)
+            // Inject Send Once field into the email form (Advanced tab, left column after settings)
             if ($event->checkContext('@MauticEmail/Email/form.html.twig', 'email.settings.advanced')) {
                 $email = $vars['email'] ?? null;
                 $sendOnce = false; // Default to false for new emails
@@ -39,7 +39,9 @@ class CustomContentSubscriber implements EventSubscriberInterface
                     $sendOnce = $this->getSendOnceValue($email->getId());
                 }
 
-                $content = $this->twig->render(
+                // Close the left column, inject our field in the right column
+                $content = '</div><div class="col-md-6">';
+                $content .= $this->twig->render(
                     '@MauticSendOnce/Email/send_once_field.html.twig',
                     [
                         'email' => $email,
