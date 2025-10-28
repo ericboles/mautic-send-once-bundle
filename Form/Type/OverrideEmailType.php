@@ -36,17 +36,31 @@ class OverrideEmailType extends EmailType
     {
         parent::buildForm($builder, $options);
 
-        $email = $options['data'];
-        $alreadySent = $email && $email->getId() ? $this->emailSendRecordRepository->hasBeenSent($email) : false;
+        $email = $options['data'] ?? null;
         
-        // Get send_once value from database since Email entity doesn't have getter/setter
+        // Skip if not an Email entity
+        if (!$email instanceof \Mautic\EmailBundle\Entity\Email) {
+            return;
+        }
+
+        $alreadySent = false;
         $sendOnceValue = false;
-        if ($email && $email->getId()) {
-            $connection = $this->entityManager->getConnection();
-            $sendOnceValue = (bool) $connection->fetchOne(
-                'SELECT send_once FROM emails WHERE id = ?',
-                [$email->getId()]
-            );
+        
+        try {
+            // Check if already sent
+            if ($email->getId()) {
+                $alreadySent = $this->emailSendRecordRepository->hasBeenSent($email);
+                
+                // Get send_once value from database
+                $connection = $this->entityManager->getConnection();
+                $result = $connection->fetchOne(
+                    'SELECT send_once FROM emails WHERE id = ?',
+                    [$email->getId()]
+                );
+                $sendOnceValue = (bool) $result;
+            }
+        } catch (\Exception $e) {
+            // If there's any error, just continue with default values
         }
 
         $builder->add(
@@ -58,19 +72,13 @@ class OverrideEmailType extends EmailType
                 'attr'       => [
                     'class'   => 'form-control',
                     'tooltip' => 'mautic.email.send_once.tooltip',
-                    'readonly' => $alreadySent, // Can't change after sent
                 ],
                 'required' => false,
-                'mapped'   => false, // Not mapped to Email entity
+                'mapped'   => false,
                 'data'     => $sendOnceValue,
                 'disabled' => $alreadySent,
             ]
         );
-
-        // Add warning message if already sent
-        if ($alreadySent) {
-            $builder->get('sendOnce')->setData(true);
-        }
     }
 
     public function getBlockPrefix(): string
