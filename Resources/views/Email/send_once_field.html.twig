@@ -1,16 +1,24 @@
 <div class="form-group">
-    <label class="control-label">{{ 'mautic.email.send_once'|trans }}</label>
-    <div class="btn-group btn-group-yesno" data-toggle="buttons">
-        <label class="btn btn-default {{ sendOnce ? '' : 'active' }}" data-toggle-group-reverse="">
-            <input type="radio" name="sendOnce" value="0" {{ sendOnce ? '' : 'checked' }} autocomplete="off">
-            <span class="mautic-icon ri-close-line fs-16 text-danger"></span>
-            {{ 'mautic.core.form.no'|trans }}
-        </label>
-        <label class="btn btn-default {{ sendOnce ? 'active' : '' }}">
-            <input type="radio" name="sendOnce" value="1" {{ sendOnce ? 'checked' : '' }} autocomplete="off">
-            <span class="mautic-icon ri-check-line fs-16 text-success"></span>
-            {{ 'mautic.core.form.yes'|trans }}
-        </label>
+    <label class="control-label" data-toggle="tooltip" data-container="body" data-placement="top" title="" data-original-title="{{ 'mautic.email.send_once.tooltip'|trans }}">
+        {{ 'mautic.email.send_once'|trans }} <i class="ri-question-line"></i>
+    </label>
+    <div class="choice-wrapper">
+        <div class="toggle" data-yes="Yes" data-no="No" data-yes-value="1" data-no-value="0">
+            <input type="radio" id="emailform_sendOnce_1" name="sendOnce" value="1" {{ sendOnce ? 'checked' : '' }} style="display: none;" class="form-control" onchange="Mautic.toggleYesNo(this);">
+            <input type="radio" id="emailform_sendOnce_0" name="sendOnce" value="0" {{ sendOnce ? '' : 'checked' }} style="display: none;" class="form-control" onchange="Mautic.toggleYesNo(this);">
+            
+            <label id="emailform_sendOnce_label" class="toggle__label" data-yes-id="emailform_sendOnce_1" data-no-id="emailform_sendOnce_0" onclick="Mautic.toggleYesNo(this);" role="switch" tabindex="0" onkeydown="Mautic.handleKeyDown(event, this)" aria-checked="{{ sendOnce ? 'true' : 'false' }}">
+                <div class="toggle__appearance">
+                    <div class="toggle__switch {{ sendOnce ? 'toggle__switch--checked' : '' }}">
+                        <svg class="toggle__check" width="6px" height="5px" viewBox="0 0 6 5">
+                            <path d="M2.2 2.7L5 0 6 1 2.2 5 0 2.7 1 1.5z"></path>
+                        </svg>
+                    </div>
+                    <span class="toggle__text" aria-hidden="true">
+                        {{ sendOnce ? 'Yes' : 'No' }}
+                    </span>
+                </div>
+            </label>
+        </div>
     </div>
-    <span class="fa fa-question-circle" data-toggle="tooltip" data-placement="top" title="{{ 'mautic.email.send_once.tooltip'|trans }}"></span>
 </div>
