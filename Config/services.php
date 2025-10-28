@@ -21,12 +21,14 @@ return function (ContainerConfigurator $configurator): void {
     $services->load('MauticPlugin\\MauticSendOnceBundle\\', '../')
         ->exclude('../{'.implode(',', array_merge(MauticCoreExtension::DEFAULT_EXCLUDES, $excludes)).'}');
 
-    // Register repository properly through EntityManager
+    // Register repositories properly through EntityManager
     $services->set(SendOnceEmailRepository::class)
         ->factory([service('doctrine.orm.entity_manager'), 'getRepository'])
         ->args([SendOnceEmail::class]);
 
-    $services->load('MauticPlugin\\MauticSendOnceBundle\\Entity\\', '../Entity/EmailSendRecordRepository.php');
+    $services->set(\MauticPlugin\MauticSendOnceBundle\Entity\EmailSendRecordRepository::class)
+        ->factory([service('doctrine.orm.entity_manager'), 'getRepository'])
+        ->args([\MauticPlugin\MauticSendOnceBundle\Entity\EmailSendRecord::class]);
 
     // Decorate EmailType to add send_once checkbox
     $services->set(MauticPlugin\MauticSendOnceBundle\Form\Type\OverrideEmailType::class)
