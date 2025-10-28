@@ -4,22 +4,23 @@ declare(strict_types=1);
 
 namespace MauticPlugin\MauticSendOnceBundle\EventListener;
 
+use Doctrine\DBAL\Connection;
 use Mautic\EmailBundle\EmailEvents;
 use Mautic\EmailBundle\Event\EmailEvent;
-use MauticPlugin\MauticSendOnceBundle\Entity\SendOnceEmailRepository;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 use Symfony\Component\HttpFoundation\RequestStack;
 
 /**
- * Saves the one_time_send value from the form to the database.
+ * Saves the send_once value from the form to the database.
+ * Uses direct DBAL queries to avoid memory issues.
  */
 class EmailPostSaveSubscriber implements EventSubscriberInterface
 {
     private ?\Symfony\Component\HttpFoundation\Request $request;
 
     public function __construct(
-        private SendOnceEmailRepository $sendOnceEmailRepository,
+        private Connection $connection,
         private LoggerInterface $logger,
         RequestStack $requestStack
     ) {
@@ -60,7 +61,27 @@ class EmailPostSaveSubscriber implements EventSubscriberInterface
         file_put_contents('/tmp/sendonce-save-debug.log', "Computed sendOnce value: " . ($sendOnce ? 'true' : 'false') . "\n", FILE_APPEND);
 
         try {
-            $this->sendOnceEmailRepository->setSendOnceForEmail($email, $sendOnce);
+            // Use direct DBAL to save (insert or update)
+            $existing = $this->connection->fetchOne(
+                'SELECT email_id FROM send_once_email WHERE email_id = ?',
+                [$email->getId()]
+            );
+
+            if ($existing) {
+                // Update existing record
+                $this->connection->update('send_once_email', [
+                    'send_once' => (int) $sendOnce,
+                ], [
+                    'email_id' => $email->getId(),
+                ]);
+            } else {
+                // Insert new record
+                $this->connection->insert('send_once_email', [
+                    'email_id' => $email->getId(),
+                    'send_once' => (int) $sendOnce,
+                    'date_added' => (new \DateTime())->format('Y-m-d H:i:s'),
+                ]);
+            }
 
             $this->logger->info('Updated send_once for email', [
                 'email_id' => $email->getId(),

@@ -104,7 +104,12 @@ class FinalizeCompletedEmailsCommand extends Command
                         FROM email_stats es
                         WHERE es.email_id = ?
                             AND es.lead_id = lll.lead_id
-                            AND es.is_failed = 0
+                    )
+                    AND NOT EXISTS (
+                        SELECT 1
+                        FROM lead_donotcontact dnc
+                        WHERE dnc.lead_id = lll.lead_id
+                            AND dnc.channel = "email"
                     )
                 LIMIT 1
             ', [$emailId, $emailId]);
