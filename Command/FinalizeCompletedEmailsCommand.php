@@ -85,6 +85,9 @@ class FinalizeCompletedEmailsCommand extends Command
 
         $finalizedCount = 0;
         $now = new \DateTime();
+        
+        // Group emails by their variant families to process A/B tests together
+        $processedGroups = [];
 
         foreach ($candidateEmails as $emailData) {
             $emailId = (int) $emailData['id'];
@@ -104,8 +107,23 @@ class FinalizeCompletedEmailsCommand extends Command
             if (empty($variantIds)) {
                 $variantIds = [$emailId];
             }
+            
+            // Create a unique group key for this variant family
+            sort($variantIds);
+            $groupKey = implode('-', $variantIds);
+            
+            // Skip if we've already processed this variant group
+            if (isset($processedGroups[$groupKey])) {
+                continue;
+            }
+            $processedGroups[$groupKey] = true;
 
             $variantIdList = implode(',', array_map('intval', $variantIds));
+            
+            // Get all emails in this variant group for reporting
+            $groupEmails = $this->connection->fetchAllAssociative(
+                'SELECT id, name, sent_count FROM emails WHERE id IN (' . $variantIdList . ')'
+            );
 
             // Get pending count using direct query (exact match to Mautic's getEmailPendingQuery)
             // Check across all variants for A/B tests
@@ -145,71 +163,78 @@ class FinalizeCompletedEmailsCommand extends Command
             );
 
             if ($pendingCount > 0) {
+                $emailNames = implode(', ', array_map(fn($e) => '#' . $e['id'] . ' "' . $e['name'] . '"', $groupEmails));
                 $output->writeln(sprintf(
-                    '  - Email #%d "%s" still has %d pending contact(s), skipping',
-                    $emailId,
-                    $emailName,
+                    '  - Email group [%s] still has %d pending contact(s), skipping',
+                    $emailNames,
                     $pendingCount
                 ));
                 continue;
             }
 
-            // Only finalize if at least 1 email was sent
-            if ($sentCount === 0) {
+            // Check if at least one email in the group has sent emails
+            $totalSent = array_sum(array_column($groupEmails, 'sent_count'));
+            if ($totalSent === 0) {
+                $emailNames = implode(', ', array_map(fn($e) => '#' . $e['id'] . ' "' . $e['name'] . '"', $groupEmails));
                 $output->writeln(sprintf(
-                    '  - Email #%d "%s" has not sent any emails yet, skipping',
-                    $emailId,
-                    $emailName
+                    '  - Email group [%s] has not sent any emails yet, skipping',
+                    $emailNames
                 ));
                 continue;
             }
 
+            $emailNames = implode(', ', array_map(fn($e) => '#' . $e['id'] . ' "' . $e['name'] . '"', $groupEmails));
             $output->writeln(sprintf(
-                '  - Email #%d "%s" (sent: %d) is complete',
-                $emailId,
-                $emailName,
-                $sentCount
+                '  - Email group [%s] (total sent: %d) is complete',
+                $emailNames,
+                $totalSent
             ));
 
             if ($isDryRun) {
-                $output->writeln('    <comment>[DRY RUN] Would finalize this email</comment>');
-                $finalizedCount++;
+                $output->writeln('    <comment>[DRY RUN] Would finalize this email group</comment>');
+                $finalizedCount += count($groupEmails);
                 continue;
             }
 
             try {
-                // Create send record using direct DBAL query (avoids Doctrine ORM memory issues)
-                $this->connection->insert('send_once_records', [
-                    'email_id' => $emailId,
-                    'date_sent' => $now->format('Y-m-d H:i:s'),
-                    'sent_count' => $sentCount,
-                ]);
+                // Finalize ALL emails in the variant group
+                foreach ($groupEmails as $groupEmail) {
+                    $groupEmailId = (int) $groupEmail['id'];
+                    $groupEmailSent = (int) $groupEmail['sent_count'];
+                    
+                    // Create send record using direct DBAL query
+                    $this->connection->insert('send_once_records', [
+                        'email_id' => $groupEmailId,
+                        'date_sent' => $now->format('Y-m-d H:i:s'),
+                        'sent_count' => $groupEmailSent,
+                    ]);
 
-                // Unpublish and set publish_down date
-                $this->connection->executeStatement(
-                    'UPDATE emails SET is_published = 0, publish_down = ? WHERE id = ?',
-                    [$now->format('Y-m-d H:i:s'), $emailId]
-                );
+                    // Unpublish and set publish_down date
+                    $this->connection->executeStatement(
+                        'UPDATE emails SET is_published = 0, publish_down = ? WHERE id = ?',
+                        [$now->format('Y-m-d H:i:s'), $groupEmailId]
+                    );
 
-                $this->logger->info('Finalized send-once email via cron', [
-                    'email_id' => $emailId,
-                    'email_name' => $emailName,
-                    'sent_count' => $sentCount,
-                    'publish_down' => $now->format('Y-m-d H:i:s'),
-                ]);
+                    $this->logger->info('Finalized send-once email via cron', [
+                        'email_id' => $groupEmailId,
+                        'email_name' => $groupEmail['name'],
+                        'sent_count' => $groupEmailSent,
+                        'variant_group' => $variantIdList,
+                        'publish_down' => $now->format('Y-m-d H:i:s'),
+                    ]);
+                }
 
-                $output->writeln('    <info>✓ Finalized</info>');
-                $finalizedCount++;
+                $output->writeln('    <info>✓ Finalized ' . count($groupEmails) . ' email(s) in group</info>');
+                $finalizedCount += count($groupEmails);
 
             } catch (\Exception $e) {
                 $output->writeln(sprintf(
-                    '    <error>Error finalizing email #%d: %s</error>',
-                    $emailId,
+                    '    <error>Error finalizing email group: %s</error>',
                     $e->getMessage()
                 ));
 
-                $this->logger->error('Failed to finalize send-once email', [
-                    'email_id' => $emailId,
+                $this->logger->error('Failed to finalize send-once email group', [
+                    'variant_group' => $variantIdList,
                     'error' => $e->getMessage(),
                 ]);
             }
