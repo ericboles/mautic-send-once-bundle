@@ -5,9 +5,6 @@ declare(strict_types=1);
 namespace MauticPlugin\MauticSendOnceBundle\Command;
 
 use Doctrine\DBAL\Connection;
-use Mautic\EmailBundle\Entity\Email;
-use Mautic\EmailBundle\Entity\EmailRepository;
-use MauticPlugin\MauticSendOnceBundle\Entity\EmailSendRecordRepository;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -17,8 +14,7 @@ use Symfony\Component\Console\Output\OutputInterface;
 /**
  * Cron command to finalize completed send-once emails.
  * 
- * Finds emails with send_once=1 that have completed sending (no pending contacts),
- * creates send records, unpublishes them, and sets publish_down date.
+ * Uses direct DBAL queries to avoid memory issues with Doctrine entity relationships.
  * 
  * Should be run every 5-15 minutes via cron.
  */
@@ -28,8 +24,6 @@ class FinalizeCompletedEmailsCommand extends Command
 
     public function __construct(
         private Connection $connection,
-        private EmailRepository $emailRepository,
-        private EmailSendRecordRepository $emailSendRecordRepository,
         private LoggerInterface $logger
     ) {
         parent::__construct();
@@ -149,20 +143,12 @@ class FinalizeCompletedEmailsCommand extends Command
             }
 
             try {
-                // Load the full Email entity
-                /** @var Email|null $email */
-                $email = $this->emailRepository->find($emailId);
-
-                if (!$email) {
-                    $output->writeln(sprintf(
-                        '    <error>Email #%d not found, skipping</error>',
-                        $emailId
-                    ));
-                    continue;
-                }
-
-                // Create send record
-                $this->emailSendRecordRepository->createSendRecord($email);
+                // Create send record using direct DBAL query (avoids Doctrine ORM memory issues)
+                $this->connection->insert('send_once_records', [
+                    'email_id' => $emailId,
+                    'date_sent' => $now->format('Y-m-d H:i:s'),
+                    'sent_count' => $sentCount,
+                ]);
 
                 // Unpublish and set publish_down date
                 $this->connection->executeStatement(

@@ -29,8 +29,4 @@ return function (ContainerConfigurator $configurator): void {
     $services->set(\MauticPlugin\MauticSendOnceBundle\Entity\EmailSendRecordRepository::class)
         ->factory([service('doctrine.orm.entity_manager'), 'getRepository'])
         ->args([\MauticPlugin\MauticSendOnceBundle\Entity\EmailSendRecord::class]);
-
-    // Decorate EmailType to add send_once checkbox
-    $services->set(MauticPlugin\MauticSendOnceBundle\Form\Type\OverrideEmailType::class)
-        ->decorate(Mautic\EmailBundle\Form\Type\EmailType::class);
 };
