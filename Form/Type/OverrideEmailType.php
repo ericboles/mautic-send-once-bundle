@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace MauticPlugin\MauticSendOnceBundle\Form\Type;
 
-use Doctrine\ORM\EntityManager;
+use Doctrine\ORM\EntityManagerInterface;
 use Mautic\CoreBundle\Form\Type\YesNoButtonGroupType;
 use Mautic\CoreBundle\Helper\CoreParametersHelper;
 use Mautic\CoreBundle\Helper\ThemeHelperInterface;
@@ -22,7 +22,7 @@ class OverrideEmailType extends EmailType
 {
     public function __construct(
         TranslatorInterface $translator,
-        private EntityManager $entityManager,
+        private EntityManagerInterface $entityManager,
         StageModel $stageModel,
         CoreParametersHelper $coreParametersHelper,
         ThemeHelperInterface $themeHelper,
