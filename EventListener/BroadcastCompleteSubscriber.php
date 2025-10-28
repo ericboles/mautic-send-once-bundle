@@ -32,7 +32,7 @@ class BroadcastCompleteSubscriber implements EventSubscriberInterface
     public static function getSubscribedEvents(): array
     {
         return [
-            ChannelEvents::ON_CHANNEL_BROADCAST => ['onChannelBroadcast', -100], // Run after broadcast
+            ChannelEvents::CHANNEL_BROADCAST => ['onChannelBroadcast', -100], // Run after broadcast
         ];
     }
 
