@@ -43,28 +43,35 @@ class PluginInstallSubscriber implements EventSubscriberInterface
 
         $this->logger->info('Installing Send Once plugin database schema...');
 
-        // Add one_time_send column to emails table
-        $this->addOneTimeSendColumn();
+        // Create send_once_email table (links emails to send_once status)
+        $this->createSendOnceEmailTable();
 
-        // Create send records table
+        // Create send_once_records table (tracks completed sends)
         $this->createSendRecordsTable();
 
         $this->logger->info('Send Once plugin database schema installed successfully');
     }
 
-    private function addOneTimeSendColumn(): void
+    private function createSendOnceEmailTable(): void
     {
         $sm = $this->connection->createSchemaManager();
-        $emailsTable = $sm->introspectTable('emails');
 
-        if (!$emailsTable->hasColumn('send_once')) {
-            $this->connection->executeStatement(
-                'ALTER TABLE emails ADD COLUMN send_once TINYINT(1) DEFAULT 0 NOT NULL COMMENT \'Indicates this email should only be sent once\''
-            );
-            $this->logger->info('Added send_once column to emails table');
-        } else {
-            $this->logger->info('send_once column already exists in emails table');
+        if ($sm->tablesExist(['send_once_email'])) {
+            $this->logger->info('send_once_email table already exists');
+
+            return;
         }
+
+        $sql = 'CREATE TABLE send_once_email (
+            email_id INT NOT NULL PRIMARY KEY,
+            send_once TINYINT(1) NOT NULL DEFAULT 0,
+            date_added DATETIME NOT NULL,
+            CONSTRAINT fk_send_once_email FOREIGN KEY (email_id) 
+                REFERENCES emails (id) ON DELETE CASCADE
+        ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci';
+
+        $this->connection->executeStatement($sql);
+        $this->logger->info('Created send_once_email table');
     }
 
     private function createSendRecordsTable(): void

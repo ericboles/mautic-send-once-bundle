@@ -2,16 +2,16 @@
 
 namespace MauticPlugin\MauticSendOnceBundle\EventListener;
 
-use Doctrine\DBAL\Connection;
 use Mautic\CoreBundle\CoreEvents;
 use Mautic\CoreBundle\Event\CustomContentEvent;
+use MauticPlugin\MauticSendOnceBundle\Entity\SendOnceEmailRepository;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 use Twig\Environment;
 
 class CustomContentSubscriber implements EventSubscriberInterface
 {
     public function __construct(
-        private Connection $connection,
+        private SendOnceEmailRepository $sendOnceEmailRepository,
         private Environment $twig
     ) {
     }
@@ -33,7 +33,7 @@ class CustomContentSubscriber implements EventSubscriberInterface
             if ($event->checkContext('@MauticEmail/Email/form.html.twig', 'email.settings.advanced')) {
                 $email = $vars['email'] ?? null;
                 $form = $vars['form'] ?? null;
-                $sendOnce = false; // Default to false for new emails
+                $sendOnce = true; // Default to true for new emails
                 
                 if ($email && method_exists($email, 'getId') && $email->getId()) {
                     // Existing email - get actual value from database
@@ -61,15 +61,10 @@ class CustomContentSubscriber implements EventSubscriberInterface
     private function getSendOnceValue(int $emailId): bool
     {
         try {
-            $result = $this->connection->fetchOne(
-                'SELECT send_once FROM emails WHERE id = ?',
-                [$emailId]
-            );
-            
-            return (bool) $result;
+            return $this->sendOnceEmailRepository->getSendOnceForEmail($emailId);
         } catch (\Exception $e) {
             error_log('MauticSendOnceBundle: Error fetching send_once value: ' . $e->getMessage());
-            return false;
+            return true; // Default to true for safety
         }
     }
 }

@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace MauticPlugin\MauticSendOnceBundle\EventListener;
 
-use Doctrine\DBAL\Connection;
 use Mautic\EmailBundle\EmailEvents;
 use Mautic\EmailBundle\Event\EmailEvent;
+use MauticPlugin\MauticSendOnceBundle\Entity\SendOnceEmailRepository;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 use Symfony\Component\HttpFoundation\RequestStack;
@@ -19,7 +19,7 @@ class EmailPostSaveSubscriber implements EventSubscriberInterface
     private ?\Symfony\Component\HttpFoundation\Request $request;
 
     public function __construct(
-        private Connection $connection,
+        private SendOnceEmailRepository $sendOnceEmailRepository,
         private LoggerInterface $logger,
         RequestStack $requestStack
     ) {
@@ -46,17 +46,20 @@ class EmailPostSaveSubscriber implements EventSubscriberInterface
             return;
         }
 
-        $sendOnce = isset($emailFormData['sendOnce']) ? (int) $emailFormData['sendOnce'] : 0;
+        $sendOnce = isset($emailFormData['sendOnce']) && (int) $emailFormData['sendOnce'] === 1;
 
-        // Update the send_once field directly in database
-        $this->connection->executeStatement(
-            'UPDATE emails SET send_once = ? WHERE id = ?',
-            [$sendOnce, $email->getId()]
-        );
+        try {
+            $this->sendOnceEmailRepository->setSendOnceForEmail($email, $sendOnce);
 
-        $this->logger->info('Updated send_once for email', [
-            'email_id' => $email->getId(),
-            'send_once' => $sendOnce,
-        ]);
+            $this->logger->info('Updated send_once for email', [
+                'email_id' => $email->getId(),
+                'send_once' => $sendOnce,
+            ]);
+        } catch (\Exception $e) {
+            $this->logger->error('Failed to update send_once for email', [
+                'email_id' => $email->getId(),
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 }
