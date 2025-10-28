@@ -38,13 +38,23 @@ class EmailPostSaveSubscriber implements EventSubscriberInterface
         $email = $event->getEmail();
 
         if (!$this->request) {
+            $this->logger->warning('No request found in EmailPostSaveSubscriber');
             return;
         }
 
         $emailFormData = $this->request->request->all('emailform');
         if (empty($emailFormData)) {
+            $this->logger->warning('No emailform data found');
             return;
         }
+
+        // Debug: Log all form data to see what's being posted
+        $this->logger->info('EmailForm data received', [
+            'email_id' => $email->getId(),
+            'form_data_keys' => array_keys($emailFormData),
+            'sendOnce_isset' => isset($emailFormData['sendOnce']),
+            'sendOnce_value' => $emailFormData['sendOnce'] ?? 'not set',
+        ]);
 
         $sendOnce = isset($emailFormData['sendOnce']) && (int) $emailFormData['sendOnce'] === 1;
 
@@ -54,6 +64,7 @@ class EmailPostSaveSubscriber implements EventSubscriberInterface
             $this->logger->info('Updated send_once for email', [
                 'email_id' => $email->getId(),
                 'send_once' => $sendOnce,
+                'send_once_int' => (int) $sendOnce,
             ]);
         } catch (\Exception $e) {
             $this->logger->error('Failed to update send_once for email', [
