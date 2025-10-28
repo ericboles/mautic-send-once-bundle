@@ -60,11 +60,14 @@ class CustomContentSubscriber implements EventSubscriberInterface
                     $sendOnce = $this->getSendOnceValue($item->getId());
                     
                     if ($sendOnce) {
+                        $hasBeenSent = $this->hasBeenFinalized($item->getId());
+                        
                         $content = $this->twig->render(
                             '@MauticSendOnce/Email/send_once_list_indicator.html.twig',
                             [
                                 'item' => $item,
-                                'sendOnce' => $sendOnce
+                                'sendOnce' => $sendOnce,
+                                'hasBeenSent' => $hasBeenSent
                             ]
                         );
                         $event->addContent($content);
@@ -91,6 +94,22 @@ class CustomContentSubscriber implements EventSubscriberInterface
         } catch (\Exception $e) {
             error_log('MauticSendOnceBundle: Error fetching send_once value: ' . $e->getMessage());
             return true; // Default to true for safety
+        }
+    }
+    
+    private function hasBeenFinalized(int $emailId): bool
+    {
+        try {
+            // Check if email has a send record (has been finalized)
+            $result = $this->connection->fetchOne(
+                'SELECT email_id FROM send_once_records WHERE email_id = ?',
+                [$emailId]
+            );
+            
+            return (bool) $result;
+        } catch (\Exception $e) {
+            error_log('MauticSendOnceBundle: Error checking send record: ' . $e->getMessage());
+            return false;
         }
     }
 }

@@ -1,5 +1,5 @@
 {% if sendOnce %}
-<span data-toggle="tooltip" title="{{ 'mautic.email.send_once.list_indicator'|trans }}" class="text-primary">
-    <i class="ri-mail-send-line fs-14"></i>
+<span data-toggle="tooltip" title="{% if hasBeenSent %}{{ 'mautic.email.send_once.list_indicator.completed'|trans }}{% else %}{{ 'mautic.email.send_once.list_indicator'|trans }}{% endif %}">
+    <i class="ri-fw ri-mail-send-line fs-14"></i>
 </span>
 {% endif %}
