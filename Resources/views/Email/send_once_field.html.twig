@@ -1,0 +1,108 @@
+<div class="row">
+    <div class="col-md-12">
+        <div class="panel panel-default">
+            <div class="panel-heading">
+                <h4 class="panel-title">
+                    <i class="ri-lock-line"></i> Send Once Configuration
+                </h4>
+            </div>
+            <div class="panel-body">
+                <div class="form-group mb-0">
+                    <label class="control-label">
+                        <input type="checkbox" name="sendOnce" value="1" {{ sendOnce ? 'checked' : '' }} id="send-once-checkbox">
+                        Send Once (Auto-unpublish after completion)
+                    </label>
+                    <div class="help-block">
+                        <div class="send-once-explanation {{ sendOnce ? '' : 'hidden' }}">
+                            <i class="ri-info-line text-primary"></i>
+                            <small>
+                                <strong>Send Once enabled:</strong> After all contacts have been sent this email, 
+                                it will be automatically unpublished and cannot be re-sent or re-activated.
+                            </small>
+                        </div>
+                        <div class="standard-explanation {{ not sendOnce ? '' : 'hidden' }}">
+                            <i class="ri-repeat-line text-muted"></i>
+                            <small>
+                                <strong>Standard mode:</strong> This email can be sent multiple times and re-activated as needed.
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+/* Send Once Field Styling */
+#send-once-checkbox {
+    margin-right: 8px;
+    transform: scale(1.2);
+}
+
+.send-once-explanation,
+.standard-explanation {
+    transition: opacity 0.3s ease, max-height 0.3s ease;
+    max-height: 100px;
+    overflow: hidden;
+    margin-top: 8px;
+}
+
+.send-once-explanation.hidden,
+.standard-explanation.hidden {
+    max-height: 0;
+    opacity: 0;
+    margin: 0;
+    padding: 0;
+}
+
+/* Panel styling for dark mode support */
+body.dark-mode .panel-default {
+    background-color: var(--bg-card, #2b2b2b);
+    border-color: var(--border-color, #444);
+}
+
+body.dark-mode .panel-default .panel-heading {
+    background-color: var(--bg-card-header, #1e1e1e);
+    border-color: var(--border-color, #444);
+    color: var(--text-primary, #fff);
+}
+
+body.dark-mode .panel-default .panel-body {
+    color: var(--text-primary, #fff);
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Handle checkbox changes for send once
+    const sendOnceCheckbox = document.getElementById('send-once-checkbox');
+    const sendOnceExplanation = document.querySelector('.send-once-explanation');
+    const standardExplanation = document.querySelector('.standard-explanation');
+    
+    function updateExplanations() {
+        if (sendOnceCheckbox && sendOnceCheckbox.checked) {
+            if (sendOnceExplanation) {
+                sendOnceExplanation.classList.remove('hidden');
+            }
+            if (standardExplanation) {
+                standardExplanation.classList.add('hidden');
+            }
+        } else {
+            if (sendOnceExplanation) {
+                sendOnceExplanation.classList.add('hidden');
+            }
+            if (standardExplanation) {
+                standardExplanation.classList.remove('hidden');
+            }
+        }
+    }
+
+    if (sendOnceCheckbox) {
+        sendOnceCheckbox.addEventListener('change', updateExplanations);
+    }
+
+    // Initial setup
+    updateExplanations();
+});
+</script>

@@ -1,0 +1,73 @@
+<?php
+
+namespace MauticPlugin\MauticSendOnceBundle\EventListener;
+
+use Doctrine\DBAL\Connection;
+use Mautic\CoreBundle\CoreEvents;
+use Mautic\CoreBundle\Event\CustomContentEvent;
+use Symfony\Component\EventDispatcher\EventSubscriberInterface;
+use Twig\Environment;
+
+class CustomContentSubscriber implements EventSubscriberInterface
+{
+    public function __construct(
+        private Connection $connection,
+        private Environment $twig
+    ) {
+    }
+
+    public static function getSubscribedEvents(): array
+    {
+        return [
+            CoreEvents::VIEW_INJECT_CUSTOM_CONTENT => ['onInjectCustomContent', 0],
+        ];
+    }
+
+    public function onInjectCustomContent(CustomContentEvent $event): void
+    {
+        $context = $event->getContext();
+        $vars = $event->getVars();
+
+        try {
+            // Inject Send Once field into the email form (Advanced tab, after settings)
+            if ($event->checkContext('@MauticEmail/Email/form.html.twig', 'email.settings.advanced')) {
+                $email = $vars['email'] ?? null;
+                $sendOnce = false; // Default to false for new emails
+                
+                if ($email && method_exists($email, 'getId') && $email->getId()) {
+                    // Existing email - get actual value from database
+                    $sendOnce = $this->getSendOnceValue($email->getId());
+                }
+
+                $content = $this->twig->render(
+                    '@MauticSendOnce/Email/send_once_field.html.twig',
+                    [
+                        'email' => $email,
+                        'sendOnce' => $sendOnce,
+                        'isNewEmail' => !($email && $email->getId())
+                    ]
+                );
+                $event->addContent($content);
+                return;
+            }
+        } catch (\Exception $e) {
+            // Silently continue if there's an error - don't break the UI
+            error_log('MauticSendOnceBundle: Error injecting custom content: ' . $e->getMessage());
+        }
+    }
+    
+    private function getSendOnceValue(int $emailId): bool
+    {
+        try {
+            $result = $this->connection->fetchOne(
+                'SELECT send_once FROM emails WHERE id = ?',
+                [$emailId]
+            );
+            
+            return (bool) $result;
+        } catch (\Exception $e) {
+            error_log('MauticSendOnceBundle: Error fetching send_once value: ' . $e->getMessage());
+            return false;
+        }
+    }
+}
