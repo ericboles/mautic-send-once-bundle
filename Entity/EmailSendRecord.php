@@ -31,13 +31,13 @@ class EmailSendRecord
 
         $builder->setTable(self::TABLE_NAME)
             ->setCustomRepositoryClass(EmailSendRecordRepository::class)
+            ->addUniqueConstraint(['email_id'], 'unique_email_id')
             ->addIndex(['email_id'], 'idx_email');
 
         $builder->addId();
 
         $builder->createManyToOne('email', Email::class)
             ->addJoinColumn('email_id', 'id', false, false, 'CASCADE')
-            ->unique()
             ->build();
 
         $builder->addNamedField('dateSent', Types::DATETIME_MUTABLE, 'date_sent');
