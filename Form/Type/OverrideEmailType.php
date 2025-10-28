@@ -12,6 +12,7 @@ use Mautic\EmailBundle\Form\Type\EmailType;
 use Mautic\EmailBundle\Helper\EmailConfigInterface;
 use Mautic\StageBundle\Model\StageModel;
 use MauticPlugin\MauticSendOnceBundle\Entity\EmailSendRecordRepository;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\Form\FormBuilderInterface;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
@@ -27,7 +28,8 @@ class OverrideEmailType extends EmailType
         CoreParametersHelper $coreParametersHelper,
         ThemeHelperInterface $themeHelper,
         EmailConfigInterface $emailConfig,
-        private EmailSendRecordRepository $emailSendRecordRepository
+        private EmailSendRecordRepository $emailSendRecordRepository,
+        private LoggerInterface $logger
     ) {
         parent::__construct($translator, $entityManager, $stageModel, $coreParametersHelper, $themeHelper, $emailConfig);
     }
@@ -37,28 +39,28 @@ class OverrideEmailType extends EmailType
         parent::buildForm($builder, $options);
 
         // Debug logging to verify this method is being called
-        error_log('SendOnceBundle: buildForm called');
-        error_log('SendOnceBundle: options keys = ' . implode(', ', array_keys($options)));
+        $this->logger->info('SendOnceBundle: buildForm called');
+        $this->logger->info('SendOnceBundle: options keys = ' . implode(', ', array_keys($options)));
         
         $email = $options['data'] ?? null;
-        error_log('SendOnceBundle: email is ' . ($email ? get_class($email) : 'null'));
+        $this->logger->info('SendOnceBundle: email is ' . ($email ? get_class($email) : 'null'));
         
         // Skip if not an Email entity
         if (!$email instanceof \Mautic\EmailBundle\Entity\Email) {
-            error_log('SendOnceBundle: Not an Email entity, skipping');
+            $this->logger->info('SendOnceBundle: Not an Email entity, skipping');
             return;
         }
 
         $emailType = $email->getEmailType();
-        error_log('SendOnceBundle: Email type = ' . ($emailType ?? 'null'));
+        $this->logger->info('SendOnceBundle: Email type = ' . ($emailType ?? 'null'));
         
         // Only add for segment emails (list)
         if ($emailType !== 'list') {
-            error_log('SendOnceBundle: Not a segment email (list), skipping');
+            $this->logger->info('SendOnceBundle: Not a segment email (list), skipping');
             return;
         }
 
-        error_log('SendOnceBundle: Adding sendOnce field');
+        $this->logger->info('SendOnceBundle: Adding sendOnce field');
 
         $alreadySent = false;
         $sendOnceValue = false;
@@ -75,11 +77,11 @@ class OverrideEmailType extends EmailType
                     [$email->getId()]
                 );
                 $sendOnceValue = (bool) $result;
-                error_log('SendOnceBundle: From DB - sendOnceValue = ' . ($sendOnceValue ? 'true' : 'false'));
+                $this->logger->info('SendOnceBundle: From DB - sendOnceValue = ' . ($sendOnceValue ? 'true' : 'false'));
             }
         } catch (\Exception $e) {
             // If there's any error, just continue with default values
-            error_log('SendOnceBundle: Error getting send_once value: ' . $e->getMessage());
+            $this->logger->error('SendOnceBundle: Error getting send_once value: ' . $e->getMessage());
         }
 
         $builder->add(
@@ -99,7 +101,7 @@ class OverrideEmailType extends EmailType
             ]
         );
         
-        error_log('SendOnceBundle: sendOnce field added successfully');
+        $this->logger->info('SendOnceBundle: sendOnce field added successfully');
     }
 
     public function getBlockPrefix(): string
