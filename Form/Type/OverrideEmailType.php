@@ -36,7 +36,23 @@ class OverrideEmailType extends EmailType
     {
         parent::buildForm($builder, $options);
 
-        // Always add the field, no conditions
+        // Get the current sendOnce value from the database
+        $sendOnce = false;
+        $email = $options['data'] ?? null;
+        if ($email && method_exists($email, 'getId') && $email->getId()) {
+            try {
+                $connection = $this->entityManager->getConnection();
+                $result = $connection->fetchOne(
+                    'SELECT send_once FROM emails WHERE id = ?',
+                    [$email->getId()]
+                );
+                $sendOnce = (bool) $result;
+            } catch (\Exception $e) {
+                // Column may not exist yet, default to false
+                $sendOnce = false;
+            }
+        }
+
         $builder->add(
             'sendOnce',
             YesNoButtonGroupType::class,
@@ -49,7 +65,7 @@ class OverrideEmailType extends EmailType
                 ],
                 'required' => false,
                 'mapped'   => false,
-                'data'     => false,
+                'data'     => $sendOnce,
             ]
         );
     }

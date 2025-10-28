@@ -1,9 +1,16 @@
 <div class="form-group">
-    <label class="control-label">
-        <input type="checkbox" name="sendOnce" value="1" {{ sendOnce ? 'checked' : '' }} id="send-once-checkbox">
-        {{ 'mautic.email.send_once'|trans }}
-    </label>
-    <div class="help-block">
-        <small>{{ 'mautic.email.send_once.tooltip'|trans }}</small>
+    <label class="control-label">{{ 'mautic.email.send_once'|trans }}</label>
+    <div class="btn-group btn-group-yesno" data-toggle="buttons">
+        <label class="btn btn-default {{ sendOnce ? '' : 'active' }}" data-toggle-group-reverse="">
+            <input type="radio" name="sendOnce" value="0" {{ sendOnce ? '' : 'checked' }} autocomplete="off">
+            <span class="mautic-icon ri-close-line fs-16 text-danger"></span>
+            {{ 'mautic.core.form.no'|trans }}
+        </label>
+        <label class="btn btn-default {{ sendOnce ? 'active' : '' }}">
+            <input type="radio" name="sendOnce" value="1" {{ sendOnce ? 'checked' : '' }} autocomplete="off">
+            <span class="mautic-icon ri-check-line fs-16 text-success"></span>
+            {{ 'mautic.core.form.yes'|trans }}
+        </label>
     </div>
+    <span class="fa fa-question-circle" data-toggle="tooltip" data-placement="top" title="{{ 'mautic.email.send_once.tooltip'|trans }}"></span>
 </div>
