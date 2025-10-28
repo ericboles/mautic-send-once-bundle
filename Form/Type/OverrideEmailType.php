@@ -36,50 +36,7 @@ class OverrideEmailType extends EmailType
     {
         parent::buildForm($builder, $options);
 
-        // Write to file instead of logger
-        file_put_contents('/tmp/sendonce-debug.log', date('Y-m-d H:i:s') . ' - buildForm called' . PHP_EOL, FILE_APPEND);
-        
-        $email = $options['data'] ?? null;
-        
-        // Skip if not an Email entity
-        if (!$email instanceof \Mautic\EmailBundle\Entity\Email) {
-            file_put_contents('/tmp/sendonce-debug.log', 'Not an Email entity' . PHP_EOL, FILE_APPEND);
-            return;
-        }
-
-        $emailType = $email->getEmailType();
-        file_put_contents('/tmp/sendonce-debug.log', 'Email type: ' . ($emailType ?? 'null') . PHP_EOL, FILE_APPEND);
-        
-        // Only add for segment emails (list)
-        if ($emailType !== 'list') {
-            file_put_contents('/tmp/sendonce-debug.log', 'Not a segment email' . PHP_EOL, FILE_APPEND);
-            return;
-        }
-
-        file_put_contents('/tmp/sendonce-debug.log', 'Adding sendOnce field' . PHP_EOL, FILE_APPEND);
-
-        $alreadySent = false;
-        $sendOnceValue = false;
-        
-        try {
-            // Check if already sent
-            if ($email->getId()) {
-                $alreadySent = $this->emailSendRecordRepository->hasBeenSent($email);
-                
-                // Get send_once value from database
-                $connection = $this->entityManager->getConnection();
-                $result = $connection->fetchOne(
-                    'SELECT send_once FROM emails WHERE id = ?',
-                    [$email->getId()]
-                );
-                $sendOnceValue = (bool) $result;
-                file_put_contents('/tmp/sendonce-debug.log', 'sendOnceValue from DB: ' . ($sendOnceValue ? 'true' : 'false') . PHP_EOL, FILE_APPEND);
-            }
-        } catch (\Exception $e) {
-            // If there's any error, just continue with default values
-            file_put_contents('/tmp/sendonce-debug.log', 'Error: ' . $e->getMessage() . PHP_EOL, FILE_APPEND);
-        }
-
+        // Always add the field, no conditions
         $builder->add(
             'sendOnce',
             YesNoButtonGroupType::class,
@@ -92,12 +49,9 @@ class OverrideEmailType extends EmailType
                 ],
                 'required' => false,
                 'mapped'   => false,
-                'data'     => $sendOnceValue,
-                'disabled' => $alreadySent,
+                'data'     => false,
             ]
         );
-        
-        file_put_contents('/tmp/sendonce-debug.log', 'sendOnce field added successfully!' . PHP_EOL, FILE_APPEND);
     }
 
     public function getBlockPrefix(): string
