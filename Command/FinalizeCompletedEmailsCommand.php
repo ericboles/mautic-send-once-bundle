@@ -91,8 +91,24 @@ class FinalizeCompletedEmailsCommand extends Command
             $emailName = $emailData['name'];
             $sentCount = (int) $emailData['sent_count'];
 
+            // Get all variant IDs (including this email and any A/B variants)
+            // This is crucial for A/B tests where contacts are split between parent and variants
+            $variantIds = $this->connection->fetchFirstColumn(
+                'SELECT id FROM emails 
+                WHERE id = ? 
+                    OR variant_parent_id = ?
+                    OR (variant_parent_id IS NOT NULL AND id = (SELECT variant_parent_id FROM emails WHERE id = ?))',
+                [$emailId, $emailId, $emailId]
+            );
+            
+            if (empty($variantIds)) {
+                $variantIds = [$emailId];
+            }
+
+            $variantIdList = implode(',', array_map('intval', $variantIds));
+
             // Get pending count using direct query (exact match to Mautic's getEmailPendingQuery)
-            // This avoids memory issues from loading repository/entities
+            // Check across all variants for A/B tests
             $pendingCount = (int) $this->connection->fetchOne(
                 'SELECT COUNT(DISTINCT l.id)
                 FROM leads l
@@ -108,12 +124,12 @@ class FinalizeCompletedEmailsCommand extends Command
                     )
                     AND NOT EXISTS (
                         SELECT 1 FROM email_stats stat 
-                        WHERE stat.email_id = ? AND stat.lead_id = l.id
+                        WHERE stat.email_id IN (' . $variantIdList . ') AND stat.lead_id = l.id
                     )
                     AND NOT EXISTS (
                         SELECT 1 FROM message_queue mq 
                         WHERE mq.lead_id = l.id AND mq.channel = "email" 
-                        AND mq.channel_id = ? AND mq.status != "sent"
+                        AND mq.channel_id IN (' . $variantIdList . ') AND mq.status != "sent"
                     )
                     AND NOT EXISTS (
                         SELECT 1 FROM lead_lists_leads ll_ex
@@ -125,7 +141,7 @@ class FinalizeCompletedEmailsCommand extends Command
                         INNER JOIN emails e_cat ON e_cat.category_id = lc.category_id
                         WHERE e_cat.id = ? AND lc.lead_id = l.id AND lc.manually_removed = 1
                     )',
-                [$emailId, $emailId, $emailId, $emailId, $emailId]
+                [$emailId, $emailId, $emailId]
             );
 
             if ($pendingCount > 0) {
