@@ -29,9 +29,4 @@ return function (ContainerConfigurator $configurator): void {
     $services->set(\MauticPlugin\MauticSendOnceBundle\Entity\EmailSendRecordRepository::class)
         ->factory([service('doctrine.orm.entity_manager'), 'getRepository'])
         ->args([\MauticPlugin\MauticSendOnceBundle\Entity\EmailSendRecord::class]);
-
-    // Register Mautic's EmailRepository for use in command
-    $services->set(\Mautic\EmailBundle\Entity\EmailRepository::class)
-        ->factory([service('doctrine.orm.entity_manager'), 'getRepository'])
-        ->args([\Mautic\EmailBundle\Entity\Email::class]);
 };

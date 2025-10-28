@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace MauticPlugin\MauticSendOnceBundle\Command;
 
 use Doctrine\DBAL\Connection;
-use Mautic\EmailBundle\Entity\EmailRepository;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -15,7 +14,7 @@ use Symfony\Component\Console\Output\OutputInterface;
 /**
  * Cron command to finalize completed send-once emails.
  * 
- * Uses EmailRepository::getEmailPendingLeads() to match UI behavior exactly.
+ * Uses direct DBAL queries matching Mautic's getEmailPendingQuery logic.
  * 
  * Should be run every 5-15 minutes via cron.
  */
@@ -25,7 +24,6 @@ class FinalizeCompletedEmailsCommand extends Command
 
     public function __construct(
         private Connection $connection,
-        private EmailRepository $emailRepository,
         private LoggerInterface $logger
     ) {
         parent::__construct();
@@ -93,12 +91,41 @@ class FinalizeCompletedEmailsCommand extends Command
             $emailName = $emailData['name'];
             $sentCount = (int) $emailData['sent_count'];
 
-            // Use Mautic's EmailRepository method to get pending count - this matches UI behavior exactly
-            $pendingCount = $this->emailRepository->getEmailPendingLeads(
-                $emailId,
-                null,  // variantIds
-                null,  // listIds (will auto-detect from email)
-                true   // countOnly
+            // Get pending count using direct query (exact match to Mautic's getEmailPendingQuery)
+            // This avoids memory issues from loading repository/entities
+            $pendingCount = (int) $this->connection->fetchOne(
+                'SELECT COUNT(DISTINCT l.id)
+                FROM leads l
+                INNER JOIN lead_lists_leads lll ON lll.lead_id = l.id
+                INNER JOIN email_list_xref elx ON elx.leadlist_id = lll.leadlist_id
+                WHERE elx.email_id = ?
+                    AND lll.manually_removed = 0
+                    AND l.email IS NOT NULL
+                    AND l.email != ""
+                    AND NOT EXISTS (
+                        SELECT 1 FROM lead_donotcontact dnc 
+                        WHERE dnc.lead_id = l.id AND dnc.channel = "email"
+                    )
+                    AND NOT EXISTS (
+                        SELECT 1 FROM email_stats stat 
+                        WHERE stat.email_id = ? AND stat.lead_id = l.id
+                    )
+                    AND NOT EXISTS (
+                        SELECT 1 FROM message_queue mq 
+                        WHERE mq.lead_id = l.id AND mq.channel = "email" 
+                        AND mq.channel_id = ? AND mq.status != "sent"
+                    )
+                    AND NOT EXISTS (
+                        SELECT 1 FROM lead_lists_leads ll_ex
+                        INNER JOIN email_list_excluded ele ON ele.leadlist_id = ll_ex.leadlist_id
+                        WHERE ele.email_id = ? AND ll_ex.lead_id = l.id
+                    )
+                    AND NOT EXISTS (
+                        SELECT 1 FROM lead_categories lc
+                        INNER JOIN emails e_cat ON e_cat.category_id = lc.category_id
+                        WHERE e_cat.id = ? AND lc.lead_id = l.id AND lc.manually_removed = 1
+                    )',
+                [$emailId, $emailId, $emailId, $emailId, $emailId]
             );
 
             if ($pendingCount > 0) {
