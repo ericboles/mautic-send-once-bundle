@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace MauticPlugin\MauticSendOnceBundle\Command;
 
 use Doctrine\DBAL\Connection;
+use Mautic\CoreBundle\Helper\CacheStorageHelper;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -24,7 +25,8 @@ class FinalizeCompletedEmailsCommand extends Command
 
     public function __construct(
         private Connection $connection,
-        private LoggerInterface $logger
+        private LoggerInterface $logger,
+        private CacheStorageHelper $cacheStorageHelper
     ) {
         parent::__construct();
     }
@@ -214,6 +216,9 @@ class FinalizeCompletedEmailsCommand extends Command
                         'UPDATE emails SET is_published = 0, publish_down = ? WHERE id = ?',
                         [$now->format('Y-m-d H:i:s'), $groupEmailId]
                     );
+
+                    // Clear pending count cache so it doesn't show stale data
+                    $this->cacheStorageHelper->delete(sprintf('email|%s|pending', $groupEmailId));
 
                     $this->logger->info('Finalized send-once email via cron', [
                         'email_id' => $groupEmailId,

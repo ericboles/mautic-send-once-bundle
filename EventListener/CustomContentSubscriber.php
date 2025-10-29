@@ -75,6 +75,56 @@ class CustomContentSubscriber implements EventSubscriberInterface
                 }
                 return;
             }
+
+            // Inject JavaScript to hide pending badges for finalized Send Once emails
+            if ($event->checkContext('@MauticEmail/Email/list.html.twig', 'content.below')) {
+                // Get all finalized send-once email IDs
+                $finalizedIds = $this->getFinalizedSendOnceEmailIds();
+                
+                if (!empty($finalizedIds)) {
+                    $content = sprintf(
+                        '<script>
+                            (function() {
+                                var finalizedEmailIds = %s;
+                                
+                                // Hide pending badges on initial load
+                                document.addEventListener("DOMContentLoaded", function() {
+                                    finalizedEmailIds.forEach(function(emailId) {
+                                        var badge = document.getElementById("pending-" + emailId);
+                                        if (badge) {
+                                            badge.classList.add("hide");
+                                        }
+                                    });
+                                });
+                                
+                                // Intercept AJAX responses to prevent badges from showing after refresh
+                                if (window.Mautic && window.Mautic.ajaxActionRequest) {
+                                    var originalAjaxRequest = window.Mautic.ajaxActionRequest;
+                                    window.Mautic.ajaxActionRequest = function(action, data, callback) {
+                                        if (action === "email:getEmailCountStats") {
+                                            var wrappedCallback = function(response) {
+                                                if (response && response.stats) {
+                                                    response.stats.forEach(function(stat) {
+                                                        if (finalizedEmailIds.includes(stat.id)) {
+                                                            stat.pending = 0;
+                                                        }
+                                                    });
+                                                }
+                                                if (callback) callback(response);
+                                            };
+                                            return originalAjaxRequest.call(this, action, data, wrappedCallback);
+                                        }
+                                        return originalAjaxRequest.apply(this, arguments);
+                                    };
+                                }
+                            })();
+                        </script>',
+                        json_encode($finalizedIds)
+                    );
+                    $event->addContent($content);
+                }
+                return;
+            }
         } catch (\Exception $e) {
             // Silently continue if there's an error - don't break the UI
             error_log('MauticSendOnceBundle: Error injecting custom content: ' . $e->getMessage());
@@ -110,6 +160,19 @@ class CustomContentSubscriber implements EventSubscriberInterface
         } catch (\Exception $e) {
             error_log('MauticSendOnceBundle: Error checking send record: ' . $e->getMessage());
             return false;
+        }
+    }
+
+    private function getFinalizedSendOnceEmailIds(): array
+    {
+        try {
+            // Get all email IDs that have been finalized (exist in send_once_records)
+            return $this->connection->fetchFirstColumn(
+                'SELECT email_id FROM send_once_records'
+            );
+        } catch (\Exception $e) {
+            error_log('MauticSendOnceBundle: Error fetching finalized email IDs: ' . $e->getMessage());
+            return [];
         }
     }
 }
