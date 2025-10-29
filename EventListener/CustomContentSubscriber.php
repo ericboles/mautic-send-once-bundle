@@ -76,9 +76,40 @@ class CustomContentSubscriber implements EventSubscriberInterface
                 return;
             }
 
-            // Inject JavaScript to hide pending badges for finalized Send Once emails
+            // Inject inline script to hide pending badge for finalized Send Once emails
+            if ($event->checkContext('@MauticEmail/Email/list.html.twig', 'email.stats.below')) {
+                $item = $vars['item'] ?? null;
+                if ($item && method_exists($item, 'getId') && $item->getId()) {
+                    $emailId = $item->getId();
+                    $sendOnce = $this->getSendOnceValue($emailId);
+                    
+                    // Only hide if Send Once AND finalized (has record in send_once_records)
+                    // This ensures we don't hide during active sends or scheduled sends
+                    if ($sendOnce && $this->hasBeenFinalized($emailId)) {
+                        // Hide the pending badge for this finalized email using both CSS and JS
+                        $content = sprintf(
+                            '<style>#pending-%d { display: none !important; }</style>
+                            <script>
+                                (function() {
+                                    var badge = document.getElementById("pending-%d");
+                                    if (badge) {
+                                        badge.classList.add("hide");
+                                        badge.style.display = "none";
+                                    }
+                                })();
+                            </script>',
+                            $emailId,
+                            $emailId
+                        );
+                        $event->addContent($content);
+                    }
+                }
+                return;
+            }
+            
+            // Inject global script to intercept AJAX updates
             if ($event->checkContext('@MauticEmail/Email/list.html.twig', 'content.below')) {
-                // Get all finalized send-once email IDs
+                // Get all finalized send-once email IDs for AJAX interception
                 $finalizedIds = $this->getFinalizedSendOnceEmailIds();
                 
                 if (!empty($finalizedIds)) {
@@ -86,16 +117,6 @@ class CustomContentSubscriber implements EventSubscriberInterface
                         '<script>
                             (function() {
                                 var finalizedEmailIds = %s;
-                                
-                                // Hide pending badges on initial load
-                                document.addEventListener("DOMContentLoaded", function() {
-                                    finalizedEmailIds.forEach(function(emailId) {
-                                        var badge = document.getElementById("pending-" + emailId);
-                                        if (badge) {
-                                            badge.classList.add("hide");
-                                        }
-                                    });
-                                });
                                 
                                 // Intercept AJAX responses to prevent badges from showing after refresh
                                 if (window.Mautic && window.Mautic.ajaxActionRequest) {
