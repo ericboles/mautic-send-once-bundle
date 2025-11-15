@@ -29,4 +29,8 @@ return function (ContainerConfigurator $configurator): void {
     $services->set(\MauticPlugin\MauticSendOnceBundle\Entity\EmailSendRecordRepository::class)
         ->factory([service('doctrine.orm.entity_manager'), 'getRepository'])
         ->args([\MauticPlugin\MauticSendOnceBundle\Entity\EmailSendRecord::class]);
+
+    // Register SendOnce API normalizer/denormalizer
+    // Note: These services are loaded via the load() call above
+    // The autoconfigure() setting will automatically tag them with serializer.normalizer
 };

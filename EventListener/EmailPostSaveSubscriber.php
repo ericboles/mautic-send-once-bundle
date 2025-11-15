@@ -7,13 +7,15 @@ namespace MauticPlugin\MauticSendOnceBundle\EventListener;
 use Doctrine\DBAL\Connection;
 use Mautic\EmailBundle\EmailEvents;
 use Mautic\EmailBundle\Event\EmailEvent;
+use MauticPlugin\MauticSendOnceBundle\EventListener\EmailSerializerSubscriber;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 use Symfony\Component\HttpFoundation\RequestStack;
 
 /**
- * Saves the send_once value from the form to the database.
+ * Saves the send_once value from the form or API to the database.
  * Uses direct DBAL queries to avoid memory issues.
+ * Supports both form-based submissions and API requests.
  */
 class EmailPostSaveSubscriber implements EventSubscriberInterface
 {
@@ -37,28 +39,37 @@ class EmailPostSaveSubscriber implements EventSubscriberInterface
     public function onEmailPostSave(EmailEvent $event): void
     {
         $email = $event->getEmail();
+        $sendOnce = null;
 
-        // Direct debug to file
-        file_put_contents('/tmp/sendonce-save-debug.log', date('Y-m-d H:i:s') . " - onEmailPostSave called for email " . $email->getId() . "\n", FILE_APPEND);
-
-        if (!$this->request) {
-            file_put_contents('/tmp/sendonce-save-debug.log', "No request found\n", FILE_APPEND);
-            return;
+        // Priority 1: Check WeakMap for API-submitted value
+        $apiSendOnce = EmailSerializerSubscriber::getSendOnceFromMap($email);
+        if ($apiSendOnce !== null) {
+            $sendOnce = $apiSendOnce;
+        }
+        // Priority 2: Check form data (backward compatibility)
+        elseif ($this->request) {
+            $sendOnceValue = $this->request->request->get('sendOnce');
+            if ($sendOnceValue !== null) {
+                $sendOnce = (int) $sendOnceValue === 1;
+            }
+        }
+        // Priority 3: Check API request body (JSON)
+        elseif ($this->request && $this->request->getContentTypeFormat() === 'json') {
+            $content = $this->request->getContent();
+            if ($content) {
+                $data = json_decode($content, true);
+                if (isset($data['sendOnce'])) {
+                    $sendOnce = (bool) $data['sendOnce'];
+                    // Store in WeakMap for consistency
+                    EmailSerializerSubscriber::storeSendOnce($email, $sendOnce);
+                }
+            }
         }
 
-        // sendOnce is posted at the root level, not inside emailform
-        $sendOnceValue = $this->request->request->get('sendOnce');
-        
-        $debugInfo = [
-            'email_id' => $email->getId(),
-            'sendOnce_raw' => $sendOnceValue,
-            'sendOnce_type' => gettype($sendOnceValue),
-        ];
-        file_put_contents('/tmp/sendonce-save-debug.log', json_encode($debugInfo, JSON_PRETTY_PRINT) . "\n", FILE_APPEND);
-
-        $sendOnce = $sendOnceValue !== null && (int) $sendOnceValue === 1;
-
-        file_put_contents('/tmp/sendonce-save-debug.log', "Computed sendOnce value: " . ($sendOnce ? 'true' : 'false') . "\n", FILE_APPEND);
+        // If no sendOnce value found from any source, don't update
+        if ($sendOnce === null) {
+            return;
+        }
 
         try {
             // Use direct DBAL to save (insert or update)
@@ -86,11 +97,9 @@ class EmailPostSaveSubscriber implements EventSubscriberInterface
             $this->logger->info('Updated send_once for email', [
                 'email_id' => $email->getId(),
                 'send_once' => $sendOnce,
+                'source' => $apiSendOnce !== null ? 'api_weakmap' : ($this->request && $this->request->getContentTypeFormat() === 'json' ? 'api_json' : 'form'),
             ]);
-            
-            file_put_contents('/tmp/sendonce-save-debug.log', "Successfully saved to database\n\n", FILE_APPEND);
         } catch (\Exception $e) {
-            file_put_contents('/tmp/sendonce-save-debug.log', "ERROR: " . $e->getMessage() . "\n\n", FILE_APPEND);
             $this->logger->error('Failed to update send_once for email', [
                 'email_id' => $email->getId(),
                 'error' => $e->getMessage(),
